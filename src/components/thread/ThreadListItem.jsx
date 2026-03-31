@@ -6,7 +6,7 @@ function countComments(comments) {
   return comments.reduce((acc, c) => acc + 1 + countComments(c.comments), 0);
 }
 
-export default function ThreadListItem({ thread, onClick }) {
+export default function ThreadListItem({ thread, onClick, onUpvote, isUpvoted }) {
   const totalComments = countComments(thread.comments);
 
   return (
@@ -48,10 +48,17 @@ export default function ThreadListItem({ thread, onClick }) {
       </div>
 
       <div className="flex items-center gap-4 text-sm">
-        <div className="flex items-center gap-1.5 text-[#1E293B]/60 font-medium hover:text-[#10B981] transition-colors bg-[#f8fafc] px-2 py-1 rounded-md border border-[#1E293B]/10">
+        <button
+          onClick={e => { e.stopPropagation(); onUpvote(thread.id); }}
+          className={`flex items-center gap-1.5 font-medium transition-colors bg-[#f8fafc] px-2 py-1 rounded-md border ${
+            isUpvoted
+              ? 'text-[#10B981] border-[#10B981]/40'
+              : 'text-[#1E293B]/60 border-[#1E293B]/10 hover:text-[#10B981]'
+          }`}
+        >
           <ArrowUp size={16} />
           <span>{thread.likes}</span>
-        </div>
+        </button>
         <div className="flex items-center gap-1.5 text-[#1E293B]/60 font-medium hover:text-[#10B981] transition-colors bg-[#f8fafc] px-2 py-1 rounded-md border border-[#1E293B]/10">
           <MessageCircle size={16} />
           <span>{totalComments} 件のコメント</span>

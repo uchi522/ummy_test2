@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ArrowLeft, MoreHorizontal, ArrowUp, MessageCircle, Bookmark, ChevronRight } from 'lucide-react';
 import CommentBlock from './CommentBlock';
 
@@ -6,7 +7,31 @@ function countComments(comments) {
   return comments.reduce((acc, c) => acc + 1 + countComments(c.comments), 0);
 }
 
-export default function ThreadDetail({ thread, onBack, currentUser }) {
+function maxReplyNo(comments) {
+  if (!comments || comments.length === 0) return 0;
+  return comments.reduce((max, c) => {
+    return Math.max(max, c.replyNo, maxReplyNo(c.comments));
+  }, 0);
+}
+
+export default function ThreadDetail({ thread, onBack, currentUser, onAddComment }) {
+  const [commentText, setCommentText] = useState('');
+
+  const canSubmit = commentText.trim().length > 0;
+
+  function handleSubmit() {
+    if (!canSubmit) return;
+    onAddComment(thread.id, commentText.trim());
+    setCommentText('');
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  }
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
       <button
@@ -80,7 +105,7 @@ export default function ThreadDetail({ thread, onBack, currentUser }) {
           <div className="pt-2">
             {thread.comments && thread.comments.length > 0 ? (
               thread.comments.map(comment => (
-                <CommentBlock key={comment.id} comment={comment} />
+                <CommentBlock key={comment.id} comment={comment} opAuthorId={thread.authorId} />
               ))
             ) : (
               <div className="py-8 text-center text-[#1E293B]/40 text-sm font-medium">
@@ -96,10 +121,21 @@ export default function ThreadDetail({ thread, onBack, currentUser }) {
             </div>
             <input
               type="text"
+              value={commentText}
+              onChange={e => setCommentText(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder="返信を書く... (>>番号 で特定の返信を参照)"
               className="flex-1 bg-[#f8fafc] border-[1.5px] border-[#1E293B]/20 rounded-lg py-2 px-4 focus:outline-none focus:border-[#10B981] focus:ring-1 focus:ring-[#10B981] text-sm text-[#1E293B] placeholder-[#1E293B]/40 transition-all"
             />
-            <button className="bg-[#1E293B] hover:bg-[#10B981] text-white p-2 rounded-lg transition-colors border-[1.5px] border-[#1E293B]">
+            <button
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className={`p-2 rounded-lg transition-colors border-[1.5px] ${
+                canSubmit
+                  ? 'bg-[#1E293B] hover:bg-[#10B981] text-white border-[#1E293B]'
+                  : 'bg-[#1E293B]/20 text-white/50 border-[#1E293B]/20 cursor-not-allowed'
+              }`}
+            >
               <ChevronRight size={18} />
             </button>
           </div>

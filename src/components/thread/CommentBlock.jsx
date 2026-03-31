@@ -1,6 +1,8 @@
 import { CornerDownRight } from 'lucide-react';
 
-export default function CommentBlock({ comment, depth = 0 }) {
+export default function CommentBlock({ comment, depth = 0, opAuthorId }) {
+  const isOp = comment.isOp || (opAuthorId && comment.authorId === opAuthorId);
+
   return (
     <div className={`relative ${depth > 0 ? 'ml-5 mt-3' : 'mt-4'} text-[#1E293B]`}>
       {depth > 0 && (
@@ -12,9 +14,9 @@ export default function CommentBlock({ comment, depth = 0 }) {
           <span className="text-xs font-bold text-[#10B981]">No. {comment.replyNo}</span>
         </div>
 
-        <span className={`text-sm font-bold ${comment.isOp ? 'text-[#10B981]' : 'text-[#1E293B]'}`}>
+        <span className={`text-sm font-bold ${isOp ? 'text-[#10B981]' : 'text-[#1E293B]'}`}>
           {comment.author}
-          {comment.isOp && <span className="ml-1 text-[10px] uppercase bg-[#10B981]/10 text-[#10B981] px-1 rounded font-bold">OP</span>}
+          {isOp && <span className="ml-1 text-[10px] uppercase bg-[#10B981]/10 text-[#10B981] px-1 rounded font-bold">OP</span>}
           {comment.isBot && <span className="ml-1 text-[10px] uppercase bg-purple-100 text-purple-700 px-1 rounded font-bold border border-purple-200">BOT</span>}
         </span>
 
@@ -22,7 +24,7 @@ export default function CommentBlock({ comment, depth = 0 }) {
         <span className="text-xs text-[#1E293B]/40 hidden sm:inline">• {comment.time}</span>
       </div>
 
-      <div className="text-sm text-[#1E293B]/80 leading-relaxed bg-[#f8fafc] p-3 rounded-tr-lg rounded-br-lg rounded-bl-lg border-[1px] border-[#1E293B]/10 relative group">
+      <div className={`text-sm text-[#1E293B]/80 leading-relaxed p-3 rounded-tr-lg rounded-br-lg rounded-bl-lg border-[1px] border-[#1E293B]/10 relative group ${isOp ? 'bg-gray-100' : 'bg-[#f8fafc]'}`}>
         <button className="absolute top-2 right-2 text-[#1E293B]/30 hover:text-[#10B981] opacity-0 group-hover:opacity-100 transition-opacity">
           <CornerDownRight size={14} />
         </button>
@@ -38,7 +40,7 @@ export default function CommentBlock({ comment, depth = 0 }) {
       {comment.comments && comment.comments.length > 0 && (
         <div className="flex flex-col">
           {comment.comments.map(nested => (
-            <CommentBlock key={nested.id} comment={nested} depth={depth + 1} />
+            <CommentBlock key={nested.id} comment={nested} depth={depth + 1} opAuthorId={opAuthorId} />
           ))}
         </div>
       )}
