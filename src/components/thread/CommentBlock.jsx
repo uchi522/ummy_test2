@@ -1,12 +1,11 @@
-import { CornerDownRight } from 'lucide-react';
 
 export default function CommentBlock({ comment, depth = 0, opAuthorId }) {
   const isOp = comment.isOp || (opAuthorId && comment.authorId === opAuthorId);
 
   return (
-    <div className={`relative ${depth > 0 ? 'ml-5 mt-3' : 'mt-4'} text-[#1E293B]`}>
+    <div className={`relative ${depth > 0 ? 'ml-8 mt-3' : 'mt-4'} text-[#1E293B]`}>
       {depth > 0 && (
-        <div className="absolute -left-5 top-0 bottom-0 w-[1.5px] bg-[#1E293B]/10 rounded-full"></div>
+        <div className="absolute -left-8 top-0 bottom-0 w-[2px] bg-[#10B981]/30 rounded-full"></div>
       )}
 
       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -24,10 +23,7 @@ export default function CommentBlock({ comment, depth = 0, opAuthorId }) {
         <span className="text-xs text-[#1E293B]/40 hidden sm:inline">• {comment.time}</span>
       </div>
 
-      <div className={`text-sm text-[#1E293B]/80 leading-relaxed p-3 rounded-tr-lg rounded-br-lg rounded-bl-lg border-[1px] border-[#1E293B]/10 relative group ${isOp ? 'bg-gray-100' : 'bg-[#f8fafc]'}`}>
-        <button className="absolute top-2 right-2 text-[#1E293B]/30 hover:text-[#10B981] opacity-0 group-hover:opacity-100 transition-opacity">
-          <CornerDownRight size={14} />
-        </button>
+      <div className={`text-sm text-[#1E293B]/80 leading-relaxed p-3 rounded-tr-lg rounded-br-lg rounded-bl-lg border-[1px] border-[#1E293B]/10 ${isOp ? 'bg-gray-100' : 'bg-[#f8fafc]'}`}>
         <p>
           {comment.content.split(/(>>\d+)/g).map((part, i) =>
             part.match(/^>>\d+$/) ?

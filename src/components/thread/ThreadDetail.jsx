@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { ArrowLeft, MoreHorizontal, ArrowUp, MessageCircle, Bookmark, ChevronRight } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
 import CommentBlock from './CommentBlock';
 
 function countComments(comments) {
@@ -23,13 +26,6 @@ export default function ThreadDetail({ thread, onBack, currentUser, onAddComment
     if (!canSubmit) return;
     onAddComment(thread.id, commentText.trim());
     setCommentText('');
-  }
-
-  function handleKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
   }
 
   return (
@@ -80,8 +76,22 @@ export default function ThreadDetail({ thread, onBack, currentUser, onAddComment
           </h1>
 
           {/* Main Content */}
-          <div className="text-[#1E293B]/90 text-sm sm:text-base leading-relaxed mb-6 whitespace-pre-line">
-            {thread.content}
+          <div className="text-[#1E293B]/90 text-sm sm:text-base leading-relaxed mb-6
+            [&_h1]:text-xl [&_h1]:font-extrabold [&_h1]:mt-4 [&_h1]:mb-2
+            [&_h2]:text-lg [&_h2]:font-bold [&_h2]:mt-4 [&_h2]:mb-2
+            [&_h3]:text-base [&_h3]:font-bold [&_h3]:mt-3 [&_h3]:mb-1.5
+            [&_strong]:font-bold
+            [&_ul]:list-disc [&_ul]:ml-5 [&_ul]:my-2
+            [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:my-2
+            [&_li]:my-0.5
+            [&_a]:text-[#10B981] [&_a]:underline
+            [&_code]:bg-[#1E293B]/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono
+            [&_pre]:bg-[#1E293B] [&_pre]:text-white [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:my-3 [&_pre]:overflow-x-auto
+            [&_pre_code]:bg-transparent [&_pre_code]:text-white [&_pre_code]:p-0
+            [&_p]:my-2">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+              {thread.content}
+            </ReactMarkdown>
           </div>
 
           {/* Action Bar */}
@@ -115,7 +125,7 @@ export default function ThreadDetail({ thread, onBack, currentUser, onAddComment
           </div>
 
           {/* Quick Reply */}
-          <div className="mt-6 pt-4 border-t-[1.5px] border-[#1E293B]/10 flex gap-3 items-center bg-white sticky bottom-0">
+          <div className="mt-6 pt-4 border-t-[1.5px] border-[#1E293B]/10 bg-white sticky bottom-0 flex gap-3 items-center">
             <div className="w-8 h-8 rounded-lg bg-[#1E293B] text-white border-[1px] border-[#1E293B] flex items-center justify-center text-xs font-bold shrink-0">
               {currentUser.initials}
             </div>
@@ -123,7 +133,6 @@ export default function ThreadDetail({ thread, onBack, currentUser, onAddComment
               type="text"
               value={commentText}
               onChange={e => setCommentText(e.target.value)}
-              onKeyDown={handleKeyDown}
               placeholder="返信を書く... (>>番号 で特定の返信を参照)"
               className="flex-1 bg-[#f8fafc] border-[1.5px] border-[#1E293B]/20 rounded-lg py-2 px-4 focus:outline-none focus:border-[#10B981] focus:ring-1 focus:ring-[#10B981] text-sm text-[#1E293B] placeholder-[#1E293B]/40 transition-all"
             />

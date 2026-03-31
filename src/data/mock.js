@@ -25,6 +25,15 @@ export const availableTags = [
   { label: "データ分析", color: "bg-teal-100 text-teal-800 border-teal-200" },
 ];
 
+export const availableCommunities = [
+  { id: 'ai-ml', name: 'AI / 機械学習', description: '生成AI、LLM、MLOpsに関する議論・情報共有', memberCount: 134, icon: '🤖', color: '#3B82F6' },
+  { id: 'infra', name: 'インフラ / DevOps', description: 'AWS、Kubernetes、CI/CD、SREなど', memberCount: 98, icon: '⚙️', color: '#F59E0B' },
+  { id: 'frontend', name: 'フロントエンド', description: 'React、TypeScript、デザインシステムなど', memberCount: 87, icon: '⚡', color: '#0EA5E9' },
+  { id: 'backend', name: 'バックエンド', description: 'API設計、DB最適化、マイクロサービスなど', memberCount: 76, icon: '🛠️', color: '#F97316' },
+  { id: 'security', name: 'セキュリティ', description: '脆弱性対応、ガイドライン、セキュリティ設計', memberCount: 45, icon: '🔒', color: '#EF4444' },
+  { id: 'general', name: '全社雑談', description: 'テーマを問わない全社向けディスカッション', memberCount: 312, icon: '💬', color: '#10B981' },
+];
+
 export const availableDepartments = [
   "R&D",
   "インフラ基盤",
@@ -43,6 +52,7 @@ const NOW = Date.now();
 export const mockThreads = [
   {
     id: 1,
+    communityId: 'ai-ml',
     title: "AI駆動開発のこれから：CursorとCopilotを全社導入すべき理由",
     author: "Takashi Sato",
     authorId: "tS88vP",
@@ -101,6 +111,7 @@ export const mockThreads = [
   },
   {
     id: 2,
+    communityId: 'infra',
     title: "AWSベストプラクティスを今更ながら読み解いてみた（Well-Architected）",
     author: "Emily Chen",
     authorId: "eC22mN",
@@ -129,6 +140,7 @@ export const mockThreads = [
   },
   {
     id: 3,
+    communityId: 'frontend',
     title: "【備忘録】React 19に向けた既存フックの整理と移行戦略",
     author: "Shohei Yoshida",
     authorId: "sY44jR",
@@ -150,6 +162,7 @@ export const mockThreads = [
 export const additionalMockThreads = [
   {
     id: 101,
+    communityId: 'frontend',
     title: "TypeScript 5.5の新機能まとめ：inferred type predicatesが便利すぎる",
     author: "Mana Kobayashi",
     authorId: "mK77qE",
@@ -167,6 +180,7 @@ export const additionalMockThreads = [
   },
   {
     id: 102,
+    communityId: 'backend',
     title: "社内勉強会レポート：DDD（ドメイン駆動設計）入門を開催しました",
     author: "Ryo Matsuda",
     authorId: "rM66wT",
@@ -185,6 +199,7 @@ export const additionalMockThreads = [
   },
   {
     id: 103,
+    communityId: 'infra',
     title: "GitHub ActionsのキャッシュでCI時間を40%短縮した話",
     author: "Keiko Yamamoto",
     authorId: "kY44cF",
@@ -203,6 +218,7 @@ export const additionalMockThreads = [
   },
   {
     id: 104,
+    communityId: 'backend',
     title: "PostgreSQLのEXPLAIN ANALYZEを読み解く：クエリ最適化の実践",
     author: "Hiroki Ando",
     authorId: "hA33dS",
@@ -221,6 +237,7 @@ export const additionalMockThreads = [
   },
   {
     id: 105,
+    communityId: 'frontend',
     title: "Figmaの新機能「Variables」でデザイントークンを一元管理する",
     author: "Saki Nishida",
     authorId: "sN22fG",
@@ -238,6 +255,7 @@ export const additionalMockThreads = [
   },
   {
     id: 106,
+    communityId: 'infra',
     title: "OpenTelemetryで分散トレーシングを導入：マイクロサービス監視の改善",
     author: "Jun Kawamoto",
     authorId: "jK11gH",
@@ -256,6 +274,7 @@ export const additionalMockThreads = [
   },
   {
     id: 107,
+    communityId: 'backend',
     title: "Rustで書いたCLIツールをHomebrewで配布する方法",
     author: "Tatsuya Ogawa",
     authorId: "tO99hJ",
@@ -274,6 +293,7 @@ export const additionalMockThreads = [
   },
   {
     id: 108,
+    communityId: 'ai-ml',
     title: "データカタログの整備：dbtとMetabaseで社内データを民主化する",
     author: "Ayumi Hara",
     authorId: "aH88kK",
@@ -292,6 +312,7 @@ export const additionalMockThreads = [
   },
   {
     id: 109,
+    communityId: 'frontend',
     title: "アクセシビリティ対応の第一歩：WAI-ARIAとキーボードナビゲーション",
     author: "Nao Fujii",
     authorId: "nF77lL",
@@ -309,6 +330,7 @@ export const additionalMockThreads = [
   },
   {
     id: 110,
+    communityId: 'security',
     title: "セキュリティインシデント訓練レポート：ペネトレーションテストで学んだこと",
     author: "Daisuke Mori",
     authorId: "dM55mM",

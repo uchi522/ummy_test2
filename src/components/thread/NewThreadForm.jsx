@@ -1,26 +1,35 @@
 import { useState } from 'react';
 import { ArrowLeft, Send } from 'lucide-react';
+import MarkdownEditor, { extractPlainText } from '../ui/MarkdownEditor';
 
-export default function NewThreadForm({ onSubmit, onCancel, availableTags, availableDepartments }) {
+export default function NewThreadForm({ onSubmit, onCancel, availableTags, availableDepartments, availableCommunities = [], defaultCommunityId = '' }) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [selectedTag, setSelectedTag] = useState('');
-  const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [selectedCommunityId, setSelectedCommunityId] = useState(defaultCommunityId ?? '');
 
   const canSubmit =
     title.trim().length > 0 &&
-    content.trim().length > 0 &&
-    selectedTag !== '' &&
-    selectedDepartment !== '';
+    extractPlainText(content).length > 0 &&
+    selectedCommunityId !== '';
+
+  function toggleTag(tag) {
+    setSelectedTags(prev =>
+      prev.some(t => t.label === tag.label)
+        ? prev.filter(t => t.label !== tag.label)
+        : [...prev, tag]
+    );
+  }
 
   function handleSubmit() {
     if (!canSubmit) return;
-    const tag = availableTags.find(t => t.label === selectedTag);
+    const community = availableCommunities.find(c => c.id === selectedCommunityId);
     onSubmit({
       title: title.trim(),
       content: content.trim(),
-      tags: tag ? [tag] : [],
-      department: selectedDepartment,
+      tags: selectedTags,
+      department: community ? community.name : '',
+      communityId: selectedCommunityId,
     });
   }
 
@@ -59,49 +68,50 @@ export default function NewThreadForm({ onSubmit, onCancel, availableTags, avail
             <label className="block text-xs font-bold text-[#1E293B]/60 uppercase tracking-wider mb-1.5">
               本文 <span className="text-[#10B981]">*</span>
             </label>
-            <textarea
-              value={content}
-              onChange={e => setContent(e.target.value)}
-              placeholder="内容を入力..."
-              rows={8}
-              className="w-full bg-[#f8fafc] border-[1.5px] border-[#1E293B]/20 rounded-lg py-2.5 px-4 focus:outline-none focus:border-[#10B981] focus:ring-1 focus:ring-[#10B981] text-sm text-[#1E293B] placeholder-[#1E293B]/40 transition-all resize-none"
-            />
+            <MarkdownEditor value={content} onChange={setContent} placeholder="内容を入力... (Markdownが使えます)" />
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4">
-            {/* Tag */}
-            <div className="flex-1">
-              <label className="block text-xs font-bold text-[#1E293B]/60 uppercase tracking-wider mb-1.5">
-                タグ <span className="text-[#10B981]">*</span>
-              </label>
-              <select
-                value={selectedTag}
-                onChange={e => setSelectedTag(e.target.value)}
-                className="w-full bg-[#f8fafc] border-[1.5px] border-[#1E293B]/20 rounded-lg py-2.5 px-4 focus:outline-none focus:border-[#10B981] focus:ring-1 focus:ring-[#10B981] text-sm text-[#1E293B] transition-all appearance-none cursor-pointer"
-              >
-                <option value="">タグを選択...</option>
-                {availableTags.map(tag => (
-                  <option key={tag.label} value={tag.label}>{tag.label}</option>
-                ))}
-              </select>
+          {/* Tags (複数選択・任意) */}
+          <div>
+            <label className="block text-xs font-bold text-[#1E293B]/60 uppercase tracking-wider mb-2">
+              タグ <span className="text-[#1E293B]/30 font-normal normal-case tracking-normal">（任意・複数選択可）</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {availableTags.map(tag => {
+                const isSelected = selectedTags.some(t => t.label === tag.label);
+                return (
+                  <button
+                    key={tag.label}
+                    type="button"
+                    onClick={() => toggleTag(tag)}
+                    className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${
+                      isSelected
+                        ? `${tag.color} border-current opacity-100`
+                        : 'bg-[#f8fafc] text-[#1E293B]/40 border-[#1E293B]/15 hover:border-[#1E293B]/30 hover:text-[#1E293B]/60'
+                    }`}
+                  >
+                    {tag.label}
+                  </button>
+                );
+              })}
             </div>
+          </div>
 
-            {/* Department */}
-            <div className="flex-1">
-              <label className="block text-xs font-bold text-[#1E293B]/60 uppercase tracking-wider mb-1.5">
-                投稿先 <span className="text-[#10B981]">*</span>
-              </label>
-              <select
-                value={selectedDepartment}
-                onChange={e => setSelectedDepartment(e.target.value)}
-                className="w-full bg-[#f8fafc] border-[1.5px] border-[#1E293B]/20 rounded-lg py-2.5 px-4 focus:outline-none focus:border-[#10B981] focus:ring-1 focus:ring-[#10B981] text-sm text-[#1E293B] transition-all appearance-none cursor-pointer"
-              >
-                <option value="">投稿先を選択...</option>
-                {availableDepartments.map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
-                ))}
-              </select>
-            </div>
+          {/* Community */}
+          <div>
+            <label className="block text-xs font-bold text-[#1E293B]/60 uppercase tracking-wider mb-1.5">
+              投稿先コミュニティ <span className="text-[#10B981]">*</span>
+            </label>
+            <select
+              value={selectedCommunityId}
+              onChange={e => setSelectedCommunityId(e.target.value)}
+              className="w-full bg-[#f8fafc] border-[1.5px] border-[#1E293B]/20 rounded-lg py-2.5 px-4 focus:outline-none focus:border-[#10B981] focus:ring-1 focus:ring-[#10B981] text-sm text-[#1E293B] transition-all appearance-none cursor-pointer"
+            >
+              <option value="">コミュニティを選択...</option>
+              {availableCommunities.map(c => (
+                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+              ))}
+            </select>
           </div>
 
           {/* Submit */}
