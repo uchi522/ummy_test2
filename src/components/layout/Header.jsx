@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Search, Bell, MessageSquare, Settings } from 'lucide-react';
 import NotificationItem from '../notifications/NotificationItem';
+import AvatarIcon from '../ui/AvatarIcon';
 
 export default function Header({
   currentUser,
@@ -14,7 +15,9 @@ export default function Header({
   onOpenSettings,
 }) {
   const [searchValue, setSearchValue] = useState('');
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const notifRef = useRef(null);
+  const profileRef = useRef(null);
 
   function handleKeyDown(e) {
     if (e.key === 'Enter' && searchValue.trim()) {
@@ -32,6 +35,16 @@ export default function Header({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isNotifOpen, onBellClick]);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (profileRef.current && !profileRef.current.contains(e.target)) {
+        setIsProfileOpen(false);
+      }
+    }
+    if (isProfileOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isProfileOpen]);
 
   return (
     <header className="h-16 bg-white border-b-[1.5px] border-[#1E293B] flex items-center justify-between px-6 sticky top-0 z-20 shrink-0">
@@ -101,10 +114,25 @@ export default function Header({
           )}
         </div>
 
-        <div className="flex items-center gap-2 cursor-pointer group">
-          <div className="w-9 h-9 rounded-full bg-[#1E293B] text-white border-[1.5px] border-[#1E293B] flex items-center justify-center text-xs font-bold shadow-[2px_2px_0px_#10B981] group-hover:translate-y-[1px] group-hover:shadow-[1px_1px_0px_#10B981] transition-all">
-            {currentUser.initials}
-          </div>
+        <div className="relative" ref={profileRef}>
+          <button
+            onClick={() => setIsProfileOpen(o => !o)}
+            className="flex items-center gap-2 cursor-pointer group"
+          >
+            <AvatarIcon
+              picture={currentUser.picture}
+              initials={currentUser.initials}
+              size={36}
+              className="bg-[#1E293B] text-white text-xs shadow-[2px_2px_0px_#10B981] group-hover:translate-y-[1px] group-hover:shadow-[1px_1px_0px_#10B981] transition-all"
+            />
+          </button>
+
+          {isProfileOpen && (
+            <div className="absolute top-full right-0 mt-2 w-56 bg-white border-[1.5px] border-[#1E293B]/20 rounded-xl shadow-[3px_3px_0px_rgba(30,41,59,0.08)] p-4 z-50">
+              <p className="text-sm font-bold text-[#1E293B] truncate">{currentUser.name}</p>
+              <p className="text-xs text-[#1E293B]/50 mt-0.5 truncate">{currentUser.email}</p>
+            </div>
+          )}
         </div>
       </div>
     </header>

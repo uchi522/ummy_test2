@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import './styles/index.css';
 
+import Login from './components/Login';
 import {
   currentUser,
   trendingTags,
@@ -101,7 +102,22 @@ function maxReplyNoFlat(comments) {
 
 // ─── App ─────────────────────────────────────────────────────────────────────
 
+const TOKEN_KEY = 'corpboard_id_token';
+
+function decodeJwt(token) {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(
+      atob(base64).split('').map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join('')
+    );
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem(TOKEN_KEY));
   const [threads, setThreads] = useState(mockThreads);
   const [extraThreads, setExtraThreads] = useState(additionalMockThreads);
   const [sortOrder, setSortOrder] = useState('trend');
@@ -137,6 +153,27 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('notif_badge', JSON.stringify(badgeCount));
   }, [badgeCount]);
+
+  useEffect(() => {
+    const handleLogout = () => setIsLoggedIn(false);
+    window.addEventListener('auth:logout', handleLogout);
+    return () => window.removeEventListener('auth:logout', handleLogout);
+  }, []);
+
+  if (!isLoggedIn) {
+    return <Login onLogin={() => setIsLoggedIn(true)} />;
+  }
+
+  const profile = decodeJwt(localStorage.getItem(TOKEN_KEY));
+  const activeUser = profile
+    ? {
+        ...currentUser,
+        name: profile.name || currentUser.name,
+        email: profile.email || '',
+        picture: profile.picture || null,
+        initials: (profile.name || currentUser.name).split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
+      }
+    : currentUser;
 
   const activeCommunity = availableCommunities.find(c => c.id === selectedCommunityId) ?? null;
 
@@ -228,8 +265,8 @@ export default function App() {
         const newComment = {
           id: Date.now(),
           replyNo: newReplyNo,
-          author: currentUser.name,
-          authorId: currentUser.id,
+          author: activeUser.name,
+          authorId: activeUser.id,
           time: "たった今",
           content: text,
           comments: [],
@@ -273,7 +310,6 @@ export default function App() {
 
   function handleCreateThread({ title, content, tags, department, communityId }) {
     const newId = Math.max(...threads.map(t => t.id), 0) + 1;
-    const initials = currentUser.name.split(' ').map(n => n[0]).join('');
     const newThread = {
       id: newId,
       title,
@@ -281,11 +317,12 @@ export default function App() {
       tags,
       department,
       communityId,
-      author: currentUser.name,
-      authorId: currentUser.id,
+      author: activeUser.name,
+      authorId: activeUser.id,
       time: "たった今",
       createdAt: Date.now(),
-      avatar: initials,
+      avatar: activeUser.initials,
+      avatarUrl: activeUser.picture || null,
       avatarBg: "bg-[#10B981] text-white",
       likes: 0,
       comments: [],
@@ -348,7 +385,7 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-[#f8fafc] text-[#1E293B] font-sans overflow-hidden selection:bg-[#10B981]/30">
       <Header
-        currentUser={currentUser}
+        currentUser={activeUser}
         onSearch={handleSearch}
         notifications={notifications}
         badgeCount={badgeCount}
@@ -374,7 +411,7 @@ export default function App() {
             {currentView === 'detail' && activeThread ? (
               <ThreadDetail
                 thread={activeThread}
-                currentUser={currentUser}
+                currentUser={activeUser}
                 onBack={handleBack}
                 onAddComment={handleAddComment}
               />
