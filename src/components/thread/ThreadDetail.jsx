@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, MoreHorizontal, ArrowUp, MessageCircle, Bookmark, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import AvatarIcon from '../ui/AvatarIcon';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import CommentBlock from './CommentBlock';
@@ -43,9 +44,12 @@ export default function ThreadDetail({ thread, onBack, currentUser, onAddComment
           {/* OP Header */}
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm border-[1.5px] border-[#1E293B] ${thread.avatarBg}`}>
-                {thread.avatar}
-              </div>
+              <AvatarIcon
+                picture={thread.avatarUrl}
+                initials={thread.avatar}
+                size={40}
+                className={`rounded-xl text-sm font-bold ${thread.avatarBg}`}
+              />
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-[#1E293B]">{thread.author}</span>
@@ -126,9 +130,12 @@ export default function ThreadDetail({ thread, onBack, currentUser, onAddComment
 
           {/* Quick Reply */}
           <div className="mt-6 pt-4 border-t-[1.5px] border-[#1E293B]/10 bg-white sticky bottom-0 flex gap-3 items-center">
-            <div className="w-8 h-8 rounded-lg bg-[#1E293B] text-white border-[1px] border-[#1E293B] flex items-center justify-center text-xs font-bold shrink-0">
-              {currentUser.initials}
-            </div>
+            <AvatarIcon
+              picture={currentUser.picture}
+              initials={currentUser.initials}
+              size={32}
+              className="rounded-lg bg-[#1E293B] text-white text-xs font-bold shrink-0"
+            />
             <input
               type="text"
               value={commentText}
