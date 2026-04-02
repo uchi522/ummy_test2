@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './styles/index.css';
 
+import Login from './components/Login';
 import {
   currentUser,
   trendingTags,
@@ -47,7 +48,10 @@ function maxReplyNoFlat(comments) {
   }, 0);
 }
 
+const TOKEN_KEY = 'corpboard_id_token';
+
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem(TOKEN_KEY));
   const [threads, setThreads] = useState(mockThreads);
   const [extraThreads, setExtraThreads] = useState(additionalMockThreads);
   const [sortOrder, setSortOrder] = useState('trend');
@@ -56,6 +60,16 @@ export default function App() {
   const [currentView, setCurrentView] = useState('feed'); // 'feed' | 'detail' | 'create'
   const [selectedCommunityId, setSelectedCommunityId] = useState(null);
   const [joinedCommunityIds, setJoinedCommunityIds] = useState(new Set());
+
+  useEffect(() => {
+    const handleLogout = () => setIsLoggedIn(false);
+    window.addEventListener('auth:logout', handleLogout);
+    return () => window.removeEventListener('auth:logout', handleLogout);
+  }, []);
+
+  if (!isLoggedIn) {
+    return <Login onLogin={() => setIsLoggedIn(true)} />;
+  }
 
   const activeCommunity = availableCommunities.find(c => c.id === selectedCommunityId) ?? null;
 
