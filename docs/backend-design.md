@@ -4,13 +4,22 @@
 
 ### 1-1. 設計方針
 
-**シングルテーブル設計**を採用する。テーブル名: `corpboard-{env}`
+**マルチテーブルベースのハイブリッド設計**を採用する。エンティティごとにテーブルを分割し、運用保守性と機能拡張への耐性を確保する。ただし、アクセス頻度が高く常に同時取得される「Thread（スレッド）」と「Comment（コメント）」のみ同一テーブルに同居させ、1クエリ完結のパフォーマンスを維持する。
 
+| テーブル名 | 格納エンティティ |
+|---|---|
+| `CorpBoardThreads-{env}` | Thread、Comment、Like（スレッド/コメント） |
+| `CorpBoardUsers-{env}` | Membership（参加コミュニティ）、Bookmark、Notification、Participation（コメント履歴）、Posted（投稿履歴） |
+| `CorpBoardCommunities-{env}` | Community |
+| `CorpBoardTags-{env}` | Tag |
+
+全テーブル共通:
 - PK（Partition Key）: `string` — エンティティ種別 + ID
 - SK（Sort Key）: `string` — 関係性・並び順を表現
+- BillingMode: `PAY_PER_REQUEST`（オンデマンドキャパシティ）— リクエストがない時間帯の課金ゼロを保証
 - GSI（グローバルセカンダリインデックス）でクエリパターンをカバー
 
-**スレッド詳細の1クエリ取得**
+**スレッド詳細の1クエリ取得**（CorpBoardThreadsテーブル内）
 スレッド本体のSKに `#META#` プレフィックスを使うことで、`PK = THREAD#{threadId}` でQueryした際に昇順（デフォルト）で先頭にスレッド本体、以降に時系列順のコメントが並ぶ。
 
 ```
@@ -25,19 +34,17 @@ Query PK = THREAD#{threadId} の返却順:
 
 ### 1-2. エンティティ定義
 
-#### User（ユーザー）
+#### Membership（参加コミュニティ）
+
+ユーザーがコミュニティに参加・退会した際に書き込む。`GET /users/me/communities` の取得に使用する。
 
 | 属性 | 型 | 説明 |
 |---|---|---|
 | `PK` | `USER#{userId}` | ユーザーID（Google の `sub` クレーム） |
-| `SK` | `META#{userId}` | 固定パターン |
-| `name` | string | 表示名 |
-| `email` | string | メールアドレス |
-| `department` | string | 部門名 |
-| `initials` | string | アバターイニシャル（例: `AC`） |
-| `avatarColor` | string | アバター背景色（HEX値、例: `#1E293B`） |
-| `createdAt` | number | 作成日時（UNIXミリ秒） |
-| `updatedAt` | number | 更新日時（UNIXミリ秒） |
+| `SK` | `MEMBER#{communityId}` | コミュニティID |
+| `joinedAt` | number | 参加日時（UNIXミリ秒） |
+
+> ユーザープロフィール（名前・メール・アバター）はすべて Google の ID Token クレームから取得するため、DynamoDB への保存は不要。
 
 #### Community（コミュニティ）
 
@@ -61,8 +68,8 @@ Query PK = THREAD#{threadId} の返却順:
 | `title` | string | タイトル |
 | `content` | string | 本文（Markdown） |
 | `authorId` | string | 投稿者ユーザーID |
-| `authorName` | string | 投稿者表示名（非正規化） |
-| `department` | string | 投稿者部門（非正規化） |
+| `authorName` | string | 投稿者表示名（非正規化・投稿時点の値を保持） |
+| `authorPicture` | string | 投稿者プロフィール画像URL（Google提供・非正規化・投稿時点の値を保持） |
 | `communityId` | string | 所属コミュニティID |
 | `tags` | list\<string\> | タグラベル一覧 `["AI", "AWS"]`（色はフロントエンドで解決） |
 | `likesCount` | number | いいね数（アトミック更新） |
@@ -70,7 +77,9 @@ Query PK = THREAD#{threadId} の返却順:
 | `createdAt` | number | 作成日時（UNIXミリ秒） |
 | `updatedAt` | number | 更新日時 |
 | `GSI1PK` | `COMMUNITY#{communityId}` | GSI1 用（コミュニティ絞り込み） |
-| `GSI1SK` | `{timestamp}` | GSI1 用（時系列ソート） |
+| `GSI1SK` | `{threadId}` | GSI1 用（時系列ソート。ULIDはミリ秒精度のタイムスタンプを内包し辞書順＝時系列順となるため、createdAtを別途射影する必要がない） |
+
+> **非正規化データの仕様（Point in Time）**: `authorName`・`authorPicture` は投稿時点の Google クレーム値を永続的に保持する。ユーザーが Google アカウントの表示名やプロフィール画像を変更しても過去の投稿には反映されない。これは意図的な設計であり、投稿当時の文脈を記録として保つ仕様とする。
 
 #### Comment（コメント）
 
@@ -83,12 +92,46 @@ DynamoDB の 400KB/item 制限を回避し、無制限ネストに対応する�
 | `SK` | `COMMENT#{timestamp}#{commentId}` | timestampで時系列ソート、commentIdで一意性保証 |
 | `content` | string | コメント本文（Markdown） |
 | `authorId` | string | 投稿者ユーザーID |
-| `authorName` | string | 投稿者表示名（非正規化） |
+| `authorName` | string | 投稿者表示名（非正規化・投稿時点の値を保持） |
+| `authorPicture` | string | 投稿者プロフィール画像URL（Google提供・非正規化・投稿時点の値を保持） |
 | `parentId` | string \| null | 返信先コメントID（トップレベルは `null`） |
 | `replyNo` | number | BBSスタイルの連番（スレッド内でインクリメント） |
 | `likesCount` | number | いいね数 |
 | `isBot` | boolean | BOTフラグ |
 | `createdAt` | number | 作成日時（UNIXミリ秒） |
+
+#### Participation（コメント履歴）
+
+コメント投稿時にトランザクションで同時書き込みし、ユーザーのコメント履歴を記録する。`GET /users/me/participated-threads` の取得に使用する。
+
+| 属性 | 型 | 説明 |
+|---|---|---|
+| `PK` | `USER#{userId}` | ユーザーID（CorpBoardUsersテーブル） |
+| `SK` | `PARTICIPATED#{timestamp}#{threadId}` | タイムスタンプ（UNIXミリ秒）＋スレッドID。時系列降順ソートに対応 |
+| `updatedAt` | number | 最後にコメントした日時（UNIXミリ秒） |
+
+取得フロー:
+1. `PK = USER#{userId}`, `SK begins_with PARTICIPATED#` でQuery（`ScanIndexForward: false` で降順）しスレッドID一覧を取得
+2. CorpBoardThreadsテーブルに対して `BatchGetItem` で最新情報を取得して結合
+
+制約と整合性:
+- `BatchGetItem` は1回あたり最大100件・16MBのため、100件超の場合はページネーション処理が必要
+- コメント投稿時はコメントPutとParticipationレコードのPutを `TransactWriteItems` で原子的に書き込む（コストは通常Writeの2倍）
+
+#### Posted（投稿履歴）
+
+スレッド投稿時に同時書き込みし、ユーザーの投稿スレッド履歴を記録する。`GET /users/me/threads` の取得に使用する。
+
+| 属性 | 型 | 説明 |
+|---|---|---|
+| `PK` | `USER#{userId}` | ユーザーID（CorpBoardUsersテーブル） |
+| `SK` | `POSTED#{timestamp}#{threadId}` | タイムスタンプ（UNIXミリ秒）＋スレッドID。時系列降順ソートに対応 |
+
+取得フロー:
+1. `PK = USER#{userId}`, `SK begins_with POSTED#` でQuery（`ScanIndexForward: false` で降順）しスレッドID一覧を取得
+2. CorpBoardThreadsテーブルに対して `BatchGetItem` で最新情報を取得して結合
+
+---
 
 #### Like（いいね）
 
@@ -128,18 +171,20 @@ DynamoDB の 400KB/item 制限を回避し、無制限ネストに対応する�
 
 | 属性 | 型 | 説明 |
 |---|---|---|
-| `PK` | `TAG#TRENDING` | 固定値 |
-| `SK` | `TAG#{tagLabel}` | タグラベル |
+| `PK` | `TAG#{tagLabel}` | タグラベル（例: `TAG#AWS`）。パーティション分散のため固定PKは使用しない |
+| `SK` | `META` | 固定値 |
 | `label` | string | タグ名 |
 | `color` | string | 表示色（HEX値） |
 | `threadCount` | number | このタグを持つスレッド数 |
 | `updatedAt` | number | 最終更新日時 |
 
+> **トレンド取得**: `GET /tags/trending` は社内ツールとして管理タグ数が少ない前提でテーブル全体を Scan し、Lambda 内で `threadCount` 降順にソートして返す。GSI は設けない。
+
 ### 1-3. GSI（グローバルセカンダリインデックス）
 
-| GSI名 | PK | SK | 用途 |
-|---|---|---|---|
-| `GSI1-community-threads` | `GSI1PK` | `GSI1SK` | コミュニティ別スレッド一覧（時系列降順） |
+| GSI名 | テーブル | PK | SK | 用途 |
+|---|---|---|---|---|
+| `GSI1-community-threads` | `CorpBoardThreads-{env}` | `GSI1PK` | `GSI1SK` | コミュニティ別スレッド一覧（時系列降順） |
 
 ---
 
@@ -152,12 +197,12 @@ Lambda 関数はリソース単位で1関数にまとめ、ハンドラー内で
 | `threads-api` | `/threads`, `/threads/{id}`, `/threads/{id}/likes`, `/threads/{id}/bookmarks` | Node.js 22.x |
 | `comments-api` | `/threads/{id}/comments`, `/threads/{id}/comments/{cid}/likes` | Node.js 22.x |
 | `communities-api` | `/communities`, `/communities/{id}`, `/communities/{id}/members` | Node.js 22.x |
-| `users-api` | `/users/me`, `/users/me/bookmarks`, `/users/me/notifications` | Node.js 22.x |
+| `users-api` | `/users/me`, `/users/me/communities`, `/users/me/threads`, `/users/me/bookmarks`, `/users/me/notifications`, `/users/me/participated-threads` | Node.js 22.x |
 | `tags-api` | `/tags/trending` | Node.js 22.x |
 
 ### 共通設計
 
-- **環境変数**: `TABLE_NAME`（DynamoDBテーブル名）、`ENV`（dev/stg/prod）
+- **環境変数**: `THREADS_TABLE`、`USERS_TABLE`、`COMMUNITIES_TABLE`、`TAGS_TABLE`（各DynamoDBテーブル名）、`ENV`（dev/stg/prod）
 - **タイムアウト**: 10秒（デフォルト3秒から延長）
 - **メモリ**: 256MB
 - **IAM**: 最小権限。各関数に必要なDynamoDBアクション（`GetItem`, `PutItem`等）のみ許可
@@ -165,17 +210,27 @@ Lambda 関数はリソース単位で1関数にまとめ、ハンドラー内で
 
 ### threads-api 詳細
 
+**データ結合ガイドライン**:
+今後発生する複雑な多角検索に対しては、安易にGSIを追加してDBレイヤーで解決しようとせず、Lambda内で対象エンティティを広めにQueryしメモリ上で結合・フィルタリングする設計を許容する。データ量が限られる社内ツールとしての割り切り。
+
 ```
 GET    /threads
   クエリパラメータ:
     communityId: string  → GSI1 で絞り込み
-    tag: string          → Filter Expression で絞り込み
+    tag: string          → Filter Expression で絞り込み（制約あり、後述）
     limit: number        → デフォルト 20、最大 100
     cursor: string       → ページネーション用 LastEvaluatedKey（Base64エンコード）
 
+  フィルター制約（tag指定時）:
+    Filter ExpressionはDynamoDBがページ単位でデータを読み取った後に適用される。
+    そのため「limit件のデータを返す前にNextTokenが尽きる」ことはないが、
+    「NextTokenが存在するにもかかわらず返却データが0件（空応答）」になり得る。
+    フロントエンドは空応答を受け取ってもデータ終了と判断せず、
+    NextTokenが存在する限り追加フェッチを継続して所定件数を充足すること。
+
 POST   /threads
   リクエストボディ: { title, content, communityId, tags[] }
-  処理: threadId生成(ULID) → DynamoDB Put → タグカウント更新
+  処理: threadId生成(ULID) → DynamoDB Put → タグカウント更新 → CorpBoardUsersテーブルに POSTED#{timestamp}#{threadId} を書き込み
 
 GET    /threads/{threadId}
   処理: PK = THREAD#{threadId} でQuery（昇順）
@@ -209,7 +264,9 @@ GET    /threads/{threadId}/comments
 POST   /threads/{threadId}/comments
   リクエストボディ: { content, parentId? }
   処理: replyNo採番（commentsCountインクリメント時の値を利用）
-        → コメントPut（SK = COMMENT#{timestamp}#{commentId}）
+        → コメントPutと参加トラッキングレコードPutをトランザクションで同時書き込み
+           - CorpBoardThreadsテーブル: COMMENT#{timestamp}#{commentId}
+           - CorpBoardUsersテーブル: USER#{userId} / PARTICIPATED#{timestamp}#{threadId}（updatedAt更新）
         → スレッドのcommentsCountインクリメント
         → 通知発行（parentIdがある場合は返信先ユーザーへ、なければスレッド投稿者へ）
 ```
@@ -224,8 +281,8 @@ POST   /threads/{threadId}/comments
 |---|---|
 | タイプ | HTTP API |
 | ステージ | `$default`（HTTP APIはステージレス運用が一般的） |
-| 認可方式 | 組み込み JWT Authorizer（Google JWKS エンドポイント参照） |
-| CORSオリジン | フロントエンドのCloudFrontドメイン（prod）/ `*`（dev/stg） |
+| 認可方式 | 組み込み JWT Authorizer（Google JWKS エンドポイント参照）。フロントエンドはSPA/SSR問わず `Authorization: Bearer <Google ID Token>` を付与する責務を持つ |
+| CORSオリジン | CloudFormationパラメータ `AllowedOrigins` で注入（prod）/ `*`（dev/stg） |
 | スロットリング | レート 1,000 req/s、バースト 500 req/s（prod） |
 | アクセスログ | CloudWatch Logs へ出力 |
 
@@ -259,13 +316,18 @@ POST   /threads/{threadId}/comments
 ├── /users
 │   └── /me
 │       ├── GET → users-api
-│       ├── PUT → users-api
+│       ├── /communities
+│       │   └── GET → users-api
+│       ├── /threads
+│       │   └── GET → users-api
 │       ├── /bookmarks
 │       │   └── GET → users-api
-│       └── /notifications
-│           ├── GET → users-api
-│           └── /read
-│               └── PUT → users-api
+│       ├── /notifications
+│       │   ├── GET → users-api
+│       │   └── /read
+│       │       └── PUT → users-api
+│       └── /participated-threads
+│           └── GET → users-api
 └── /tags
     └── /trending
         └── GET → tags-api
@@ -314,12 +376,11 @@ infra/
 ├── parameters/
 │   ├── dev.json               # dev 環境パラメータ
 │   ├── stg.json               # stg 環境パラメータ
-│   └── prod.json              # prod 環境パラメータ
+│   └── prod.json              # prod 環境パラメータ（AllowedOrigins にフロントエンドドメインを指定）
 └── modules/
     ├── dynamodb.yaml          # DynamoDB テーブル・GSI定義
     ├── api-gateway.yaml       # API Gateway（HTTP API）定義
-    ├── lambda.yaml            # Lambda 関数定義
-    └── frontend.yaml          # S3 + CloudFront 定義
+    └── lambda.yaml            # Lambda 関数定義
 ```
 
 ### 4-2. SAM テンプレート構成（主要リソース）
@@ -336,6 +397,10 @@ Parameters:
   GoogleClientId:
     Type: String
     Description: Google OAuth 2.0 Client ID（JWT の aud クレーム検証に使用）
+  AllowedOrigins:
+    Type: String
+    Default: "*"
+    Description: CORS許可オリジン（prod環境ではフロントエンドドメインを指定、dev/stgは*）
 
 Globals:
   Function:
@@ -344,24 +409,64 @@ Globals:
     MemorySize: 256
     Environment:
       Variables:
-        TABLE_NAME: !Sub "corpboard-${Env}"
+        THREADS_TABLE: !Sub "CorpBoardThreads-${Env}"
+        USERS_TABLE: !Sub "CorpBoardUsers-${Env}"
+        COMMUNITIES_TABLE: !Sub "CorpBoardCommunities-${Env}"
+        TAGS_TABLE: !Sub "CorpBoardTags-${Env}"
         ENV: !Ref Env
 
 Resources:
-  # DynamoDB
-  CorpBoardTable:
+  # DynamoDB（マルチテーブル / 詳細は modules/dynamodb.yaml 参照）
+  ThreadsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub "corpboard-${Env}"
-      BillingMode: PAY_PER_REQUEST   # オンデマンドキャパシティ
+      TableName: !Sub "CorpBoardThreads-${Env}"
+      BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
-      # PK / SK / GSI 定義（modules/dynamodb.yaml 参照）
+      # Thread, Comment, Like 格納。GSI1-community-threads を定義
+
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "CorpBoardUsers-${Env}"
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      # User, Bookmark, Notification, Participation 格納
+
+  CommunitiesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "CorpBoardCommunities-${Env}"
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  TagsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "CorpBoardTags-${Env}"
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
 
   # HTTP API
   CorpBoardApi:
     Type: AWS::Serverless::HttpApi
     Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref AllowedOrigins
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
       Auth:
         DefaultAuthorizer: GoogleJwtAuthorizer
         Authorizers:
@@ -418,17 +523,17 @@ GitHub（main/develop ブランチへのPush）
     │
     ▼
 CodeBuild: build-and-test
-    ├── npm ci（フロントエンド依存インストール）
-    ├── npm run build（Viteビルド → dist/）
     ├── Lambda 依存インストール（lambda/）
     └── （将来）ユニットテスト実行
     │
     ▼
 CodeBuild: sam-deploy
     ├── sam build（Lambda関数のパッケージング）
-    ├── sam deploy（CloudFormationスタックのデプロイ）
-    │   └── --parameter-overrides Env={dev|stg|prod}
-    └── aws s3 sync dist/ s3://corpboard-frontend-{env}/
+    └── sam deploy（CloudFormationスタックのデプロイ）
+        └── --parameter-overrides Env={dev|stg|prod} AllowedOrigins={origin}
+
+※ フロントエンドのビルド・ホスティング・CDNデプロイはフロントエンドリポジトリ側のパイプラインで管理する。
+   フレームワーク確定後、本パイプラインに追記する。
 ```
 
 ### 5-2. buildspec.yaml（概要）
@@ -441,29 +546,22 @@ phases:
     runtime-versions:
       nodejs: 22
     commands:
-      - npm ci
       - cd lambda && npm ci && cd ..
 
   build:
     commands:
-      - npm run build
       - sam build --template infra/template.yaml
 
   post_build:
     commands:
       - sam deploy
           --stack-name corpboard-${ENV}
-          --parameter-overrides Env=${ENV} GoogleClientId=${GOOGLE_CLIENT_ID}
+          --parameter-overrides Env=${ENV} GoogleClientId=${GOOGLE_CLIENT_ID} AllowedOrigins=${ALLOWED_ORIGINS}
           --no-confirm-changeset
           --no-fail-on-empty-changeset
-      - aws s3 sync dist/ s3://corpboard-frontend-${ENV}/
-      - aws cloudfront create-invalidation
-          --distribution-id ${CF_DISTRIBUTION_ID}
-          --paths "/*"
 
 artifacts:
   files:
-    - dist/**
     - infra/**
 ```
 
@@ -484,18 +582,21 @@ artifacts:
 - すべてのAPIエンドポイントはHTTP APIの組み込みJWT Authorizerで保護（認証必須）
 - JWT Authorizerは `https://accounts.google.com/.well-known/openid-configuration` のJWKSを参照し署名検証
 - 各Lambdaは `requestContext.authorizer.jwt.claims.sub` からログインユーザーID（Google sub）を取得
+- 各Lambdaのハンドラー先頭で `claims.hd` を検証し、社内ドメイン以外は即座に403を返す（`shared/auth.js` に共通実装）
 - リソースの編集・削除は `authorId === requestUserId` の一致確認を実施
+
+> **Lambda課金リスクの許容事項**: 組み込みJWT Authorizerは署名検証のみを行うため、`hd` クレーム検証（社内ドメイン確認）は後段のLambdaで実施する。これにより個人のGoogleアカウントからのリクエストでもLambdaが起動し少額の課金が発生するが、本サービスは社内ネットワークからのアクセスを前提としAPIエンドポイントの外部露出リスクが低いため許容する。Lambda Authorizerによる自前の署名検証実装はセキュリティ上のリスクが課金リスクを上回るため採用しない。
 
 ### 6-2. IAMポリシー（最小権限）
 
 ```
 threads-api の IAM ロール例:
-  dynamodb:GetItem       on corpboard-{env}
-  dynamodb:PutItem       on corpboard-{env}
-  dynamodb:UpdateItem    on corpboard-{env}
-  dynamodb:DeleteItem    on corpboard-{env}
-  dynamodb:Query         on corpboard-{env}
-  dynamodb:Query         on corpboard-{env}/index/GSI1-community-threads
+  dynamodb:GetItem       on CorpBoardThreads-{env}
+  dynamodb:PutItem       on CorpBoardThreads-{env}
+  dynamodb:UpdateItem    on CorpBoardThreads-{env}
+  dynamodb:DeleteItem    on CorpBoardThreads-{env}
+  dynamodb:Query         on CorpBoardThreads-{env}
+  dynamodb:Query         on CorpBoardThreads-{env}/index/GSI1-community-threads
 ```
 
 ### 6-3. その他
@@ -511,9 +612,11 @@ threads-api の IAM ロール例:
 
 ---
 
-## 7. フロントエンドとの連携方針
+## 7. フロントエンドとの連携仕様（将来の統合時に参照）
 
-### 7-1. 現状のモック層との対応
+> フロントエンドのフレームワーク・ホスティングが確定次第、本セクションを更新する。
+
+### 7-1. モック層からの移行手順
 
 現在、`src/hooks/useThreads.js` は `src/data/mock.js` を直接参照している。
 API連携時は以下の手順で段階的に移行する。
@@ -562,7 +665,7 @@ function buildCommentTree(comments) {
 
 | 機能 | 対応案 |
 |---|---|
-| 全文検索 | Amazon OpenSearch Service を追加し、DynamoDB Streams でインデックス同期 |
+| 全文検索・複合検索 | Amazon OpenSearch Service を追加し、DynamoDB Streams でインデックス同期。タグ検索のFilter Expression起因でパフォーマンス低下が許容値（p99 > 500ms）を超えた場合に移行を検討する |
 | リアルタイム通知 | API Gateway WebSocket API を追加（接続管理にDynamoDB使用） |
 | 画像添付 | S3 + Presigned URL で直接アップロード。Lambda でメタデータ登録 |
 | 読み取りキャッシュ | ElastiCache（Redis）でホットスレッドをキャッシュ |

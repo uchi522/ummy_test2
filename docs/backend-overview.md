@@ -17,7 +17,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  ブラウザ（React SPA / S3 + CloudFront）                            │
+│  クライアント（ブラウザ）※ホスティング構成は別途決定                │
 │  Google SSO ログインで取得した JWT (ID Token) を送信                 │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │ Authorization: Bearer <Google ID Token>
@@ -39,8 +39,9 @@
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Amazon DynamoDB（オンデマンドキャパシティ / シングルテーブル設計）  │
-│  テーブル: corpboard-{env}                                          │
+│  Amazon DynamoDB（オンデマンドキャパシティ / マルチテーブルハイブリッド設計）│
+│  CorpBoardThreads-{env}  CorpBoardUsers-{env}                      │
+│  CorpBoardCommunities-{env}  CorpBoardTags-{env}                   │
 └─────────────────────────────────────────────────────────────────────┘
 
 ─── CI/CD ───────────────────────────────────────────────────────────
@@ -55,8 +56,7 @@
 |---|---|---|
 | **API Gateway（HTTP API）** | REST APIエンドポイント | REST APIより低コスト・低レイテンシ。組み込みJWT Authorizerで外部IdP（Google）との直接連携が容易 |
 | **Lambda** | ビジネスロジック実行 | サーバー管理不要。トラフィックに応じた自動スケール。コスト効率が高い |
-| **DynamoDB** | データ永続化 | 低レイテンシ・高スループット。シングルテーブル設計で1クエリによるスレッド+コメント一括取得が可能 |
-| **S3 + CloudFront** | フロントエンドホスティング | Viteビルド成果物の配信。CDNによる高速レスポンス |
+| **DynamoDB** | データ永続化 | 低レイテンシ・高スループット。オンデマンドモードで休日課金ゼロを実現。Thread+Commentのみ同一テーブルに同居させ1クエリ完結を維持しつつ、他エンティティはテーブルを分割して保守性を確保 |
 | **CloudFormation (SAM)** | インフラ管理 | インフラのコード化（IaC）。環境（dev/stg/prod）の再現性確保 |
 | **CodeBuild** | CI/CDパイプライン | GitHub連携。ビルド・テスト・デプロイの自動化 |
 
@@ -71,11 +71,13 @@
 | `prod` | 本番 | `https://api.corpboard.internal/v1` |
 
 - 各環境は独立したAWSアカウントまたは独立したCloudFormationスタックで管理
-- DynamoTableはenv名をサフィックスに持つ（例: `corpboard-dev`）
+- DynamoDBテーブルはenv名をサフィックスに持つ（例: `CorpBoardThreads-dev`）
 
 ---
 
 ## 5. 認証・認可方針
+
+> **インターフェース契約**: フロントエンドのフレームワーク（SPA/SSR）に依存しない。クライアントは常に `Authorization: Bearer <Google ID Token>` を付与する責務を持つ。バックエンドはこの契約を変更しない。
 
 ```
 1. ログイン: ブラウザで Google OAuth 2.0 フローを実行
@@ -85,6 +87,8 @@
                  Google の JWKS エンドポイントを参照して署名検証
 5. Lambda呼び出し: 検証済みの requestContext.authorizer.jwt.claims から
                    userId（Google の sub クレーム）を取得
+6. ドメイン検証: Lambda内で claims.hd が社内ドメインであることを確認。
+                 不一致の場合は 403 を返却（shared/auth.js に共通実装）
 ```
 
 ---
@@ -123,11 +127,13 @@
 
 | メソッド | パス | 説明 |
 |---|---|---|
-| `GET` | `/users/me` | 自分のプロフィール取得 |
-| `PUT` | `/users/me` | プロフィール更新 |
+| `GET` | `/users/me` | 自分のプロフィール取得（Google クレームを返却、DB参照なし） |
+| `GET` | `/users/me/communities` | 参加中コミュニティ一覧取得 |
+| `GET` | `/users/me/threads` | 自分が投稿したスレッド一覧取得 |
 | `GET` | `/users/me/bookmarks` | ブックマーク一覧取得 |
 | `GET` | `/users/me/notifications` | 通知一覧取得 |
 | `PUT` | `/users/me/notifications/read` | 通知を既読にする |
+| `GET` | `/users/me/participated-threads` | 自分がコメントしたスレッド一覧取得 |
 
 ### タグ
 
@@ -141,8 +147,7 @@
 
 | 項目 | 目標値 | 備考 |
 |---|---|---|
-| APIレスポンスタイム | p99 < 500ms | DynamoDB直接アクセス。コールドスタートはProvisioned Concurrencyで対策 |
+| APIレスポンスタイム | p99 < 500ms | DynamoDB直接アクセス。コールドスタート対策は初回リリースに含めない（将来的な潜在課題として優先度低で管理。対策候補: メモリ割り当て増加、依存パッケージ最小化、Provisioned Concurrencyの費用対効果検討）|
 | 可用性 | 99.9%以上 | API Gateway + Lambda + DynamoDB はすべてマネージドの高可用性構成 |
-| スケーラビリティ | 同時接続 1,000ユーザー | Lambda + DynamoDB のオートスケールで対応 |
 | データ保持期間 | 無期限（削除操作まで） | DynamoDB のバックアップ（ポイントインタイムリカバリ）を有効化 |
-| セキュリティ | 社内従業員のみアクセス可 | Google アカウント認証（組織ドメイン制限） + JWT署名検証 |
+| セキュリティ | 社内従業員のみアクセス可 | Google アカウント認証（組織ドメイン制限） + JWT署名検証。`hd` クレーム検証はLambda内で実施（社内ネットワーク前提のため外部アカウントによるLambda課金リスクは許容） |
