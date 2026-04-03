@@ -1,5 +1,6 @@
 import { MoreHorizontal, ArrowUp, MessageCircle } from 'lucide-react';
 import TagBadge from '../ui/TagBadge';
+import AvatarIcon from '../ui/AvatarIcon';
 
 function countComments(comments) {
   if (!comments) return 0;
@@ -16,9 +17,12 @@ export default function ThreadListItem({ thread, onClick, onUpvote, isUpvoted })
     >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2.5">
-          <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] border border-[#1E293B] ${thread.avatarBg}`}>
-            {thread.avatar}
-          </div>
+          <AvatarIcon
+            picture={thread.avatarUrl}
+            initials={thread.avatar}
+            size={24}
+            className={`text-[10px] font-bold ${thread.avatarBg}`}
+          />
           <div className="flex items-center gap-1.5 text-xs">
             <span className="font-bold text-[#1E293B]">{thread.author}</span>
             <span className="text-[#1E293B]/40 hidden sm:inline">in</span>

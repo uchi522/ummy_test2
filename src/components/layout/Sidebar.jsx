@@ -1,7 +1,34 @@
-import { Home, MessageCircle, Bookmark, Plus } from 'lucide-react';
+import { useState } from 'react';
+import { Home, MessageCircle, Bookmark, Plus, ChevronDown, ChevronRight } from 'lucide-react';
 import SidebarItem from './SidebarItem';
 
-export default function Sidebar({ onNewThread, communities, selectedCommunityId, onSelectCommunity }) {
+function CommunityList({ communities, selectedCommunityId, onSelectCommunity }) {
+  return (
+    <div className="space-y-0.5">
+      {communities.map(community => (
+        <button
+          key={community.id}
+          onClick={() => onSelectCommunity(community.id)}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
+            selectedCommunityId === community.id
+              ? 'bg-[#10B981]/10 text-[#10B981] font-bold'
+              : 'text-[#1E293B]/70 hover:bg-[#1E293B]/5 hover:text-[#1E293B]'
+          }`}
+        >
+          <span className="text-base leading-none">{community.icon}</span>
+          <span className="truncate">{community.name}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export default function Sidebar({ onNewThread, communities, selectedCommunityId, onSelectCommunity, joinedCommunityIds }) {
+  const [isJoinedOpen, setIsJoinedOpen] = useState(true);
+  const [isAllOpen, setIsAllOpen] = useState(false);
+
+  const joinedCommunities = communities.filter(c => joinedCommunityIds?.has(c.id));
+
   return (
     <aside className="w-64 bg-white border-r-[1.5px] border-[#1E293B]/20 flex flex-col h-full shrink-0 overflow-y-auto pt-6 pb-4 px-3 hidden lg:flex">
       <div className="mb-8 px-3">
@@ -25,23 +52,49 @@ export default function Sidebar({ onNewThread, communities, selectedCommunityId,
       </div>
 
       <div className="mb-4 px-1">
-        <h3 className="text-xs font-bold text-[#1E293B]/50 uppercase tracking-wider mb-2 px-2">コミュニティ</h3>
-        <div className="space-y-0.5">
-          {communities.map(community => (
-            <button
-              key={community.id}
-              onClick={() => onSelectCommunity(community.id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
-                selectedCommunityId === community.id
-                  ? 'bg-[#10B981]/10 text-[#10B981] font-bold'
-                  : 'text-[#1E293B]/70 hover:bg-[#1E293B]/5 hover:text-[#1E293B]'
-              }`}
-            >
-              <span className="text-base leading-none">{community.icon}</span>
-              <span className="truncate">{community.name}</span>
-            </button>
-          ))}
-        </div>
+        {/* マイコミュニティ */}
+        <button
+          onClick={() => setIsJoinedOpen(v => !v)}
+          className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-bold text-[#1E293B]/50 uppercase tracking-wider hover:bg-[#1E293B]/5 transition-colors"
+        >
+          <span>マイコミュニティ</span>
+          {isJoinedOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
+
+        {isJoinedOpen && (
+          <div className="mt-1 space-y-0.5">
+            {joinedCommunities.length > 0 ? (
+              <CommunityList
+                communities={joinedCommunities}
+                selectedCommunityId={selectedCommunityId}
+                onSelectCommunity={onSelectCommunity}
+              />
+            ) : (
+              <p className="px-3 py-2 text-xs text-[#1E293B]/40 font-medium">
+                参加中のコミュニティはありません
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* すべてのコミュニティ */}
+        <button
+          onClick={() => setIsAllOpen(v => !v)}
+          className="w-full flex items-center justify-between px-2 py-1.5 mt-4 rounded-lg text-xs font-bold text-[#1E293B]/50 uppercase tracking-wider hover:bg-[#1E293B]/5 transition-colors"
+        >
+          <span>すべてのコミュニティ</span>
+          {isAllOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
+
+        {isAllOpen && (
+          <div className="mt-1">
+            <CommunityList
+              communities={communities}
+              selectedCommunityId={selectedCommunityId}
+              onSelectCommunity={onSelectCommunity}
+            />
+          </div>
+        )}
       </div>
 
       <div className="mt-auto px-3">

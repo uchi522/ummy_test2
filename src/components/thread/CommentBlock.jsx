@@ -1,6 +1,8 @@
+import AvatarIcon from '../ui/AvatarIcon';
 
 export default function CommentBlock({ comment, depth = 0, opAuthorId }) {
   const isOp = comment.isOp || (opAuthorId && comment.authorId === opAuthorId);
+  const commentInitials = comment.author.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
   return (
     <div className={`relative ${depth > 0 ? 'ml-8 mt-3' : 'mt-4'} text-[#1E293B]`}>
@@ -12,6 +14,13 @@ export default function CommentBlock({ comment, depth = 0, opAuthorId }) {
         <div className="flex items-center gap-1.5 bg-[#f8fafc] px-2 py-0.5 rounded border border-[#1E293B]/10">
           <span className="text-xs font-bold text-[#10B981]">No. {comment.replyNo}</span>
         </div>
+
+        <AvatarIcon
+          picture={comment.avatarUrl}
+          initials={commentInitials}
+          size={20}
+          className={`text-[9px] font-bold ${isOp ? 'bg-[#10B981] text-white' : 'bg-[#1E293B]/10 text-[#1E293B]'}`}
+        />
 
         <span className={`text-sm font-bold ${isOp ? 'text-[#10B981]' : 'text-[#1E293B]'}`}>
           {comment.author}
